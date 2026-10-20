@@ -1,0 +1,84 @@
+name: Compilar whisper.cpp (Vulkan, Windows x64)
+
+on:
+  workflow_dispatch:
+    inputs:
+      whisper_tag:
+        description: "Tag do whisper.cpp a compilar"
+        default: "b5454"
+      publicar:
+        description: "Publicar o zip numa Release"
+        type: boolean
+        default: true
+
+env:
+  VULKAN_SDK_VERSION: "1.4.309.0"
+
+jobs:
+  windows-vulkan:
+    runs-on: windows-2022
+    permissions:
+      contents: write
+    steps:
+      - name: Baixar o código oficial do whisper.cpp
+        run: git clone --depth 1 --branch ${{ inputs.whisper_tag }} https://github.com/ggml-org/whisper.cpp src
+
+      - name: Instalar Ninja
+        run: choco install ninja -y
+
+      - name: Instalar o Vulkan SDK (só para compilar)
+        shell: pwsh
+        run: |
+          $v = $env:VULKAN_SDK_VERSION
+          Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/$v/windows/VulkanSDK-$v-Installer.exe" -OutFile vulkan-sdk.exe
+          Start-Process -FilePath .\vulkan-sdk.exe -ArgumentList "--accept-licenses --default-answer --confirm-command install" -Wait -NoNewWindow
+          "VULKAN_SDK=C:\VulkanSDK\$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "C:\VulkanSDK\$v\Bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Compilar
+        shell: cmd
+        working-directory: src
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          cmake -S . -B build -G "Ninja Multi-Config" ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DGGML_VULKAN=ON ^
+            -DGGML_BACKEND_DL=ON ^
+            -DGGML_CPU_ALL_VARIANTS=ON ^
+            -DGGML_NATIVE=OFF ^
+            -DWHISPER_SDL2=OFF ^
+            -DWHISPER_BUILD_TESTS=OFF ^
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake --build build --config Release -j %NUMBER_OF_PROCESSORS%
+
+      - name: Montar o pacote (mesma estrutura dos oficiais: pasta Release/)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force pacote/Release | Out-Null
+          Copy-Item src/build/bin/Release/whisper-cli.exe pacote/Release/
+          Copy-Item src/build/bin/Release/*.dll pacote/Release/
+          Get-ChildItem pacote/Release | Select-Object Name, Length | Format-Table | Out-String | Write-Host
+          Compress-Archive -Path pacote/Release -DestinationPath whisper-bin-win-vulkan-x64.zip
+          $h = (Get-FileHash whisper-bin-win-vulkan-x64.zip -Algorithm SHA256).Hash.ToLower()
+          $s = (Get-Item whisper-bin-win-vulkan-x64.zip).Length
+          "sha256=$h  tamanho=$s"
+          "$h  whisper-bin-win-vulkan-x64.zip" | Out-File SHA256SUMS.txt -Encoding ascii
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: whisper-bin-win-vulkan-x64
+          path: |
+            whisper-bin-win-vulkan-x64.zip
+            SHA256SUMS.txt
+
+      - name: Publicar na Release
+        if: ${{ inputs.publicar }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "whisper-${{ inputs.whisper_tag }}-vulkan"
+          gh release delete $tag --yes --cleanup-tag 2>$null
+          gh release create $tag whisper-bin-win-vulkan-x64.zip SHA256SUMS.txt `
+            --title "whisper.cpp ${{ inputs.whisper_tag }} com Vulkan (Windows x64)" `
+            --notes "Compilação do whisper.cpp ${{ inputs.whisper_tag }} com -DGGML_VULKAN=ON para placas AMD e Intel (Arc). Usa o vulkan-1.dll que já vem com o driver de vídeo. Usado pelo instalador automático do AtaFlow AI."
