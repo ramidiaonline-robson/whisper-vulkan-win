@@ -51,7 +51,7 @@ jobs:
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build build --config Release -j %NUMBER_OF_PROCESSORS%
 
-      - name: Montar o pacote (mesma estrutura dos oficiais: pasta Release/)
+      - name: Montar o pacote (pasta Release igual aos oficiais)
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force pacote/Release | Out-Null
