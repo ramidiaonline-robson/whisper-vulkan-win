@@ -35,6 +35,13 @@ jobs:
           "VULKAN_SDK=C:\VulkanSDK\$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "C:\VulkanSDK\$v\Bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 
+      - name: Instalar SPIRV-Headers (exigido pelo backend Vulkan)
+        shell: pwsh
+        run: |
+          git clone --depth 1 https://github.com/KhronosGroup/SPIRV-Headers.git spirv-headers
+          cmake -S spirv-headers -B spirv-build -DCMAKE_INSTALL_PREFIX=C:/spirv
+          cmake --install spirv-build
+
       - name: Compilar
         shell: cmd
         working-directory: src
@@ -43,6 +50,7 @@ jobs:
           cmake -S . -B build -G "Ninja Multi-Config" ^
             -DCMAKE_BUILD_TYPE=Release ^
             -DGGML_VULKAN=ON ^
+            -DCMAKE_PREFIX_PATH=C:/spirv ^
             -DGGML_BACKEND_DL=ON ^
             -DGGML_CPU_ALL_VARIANTS=ON ^
             -DGGML_NATIVE=OFF ^
