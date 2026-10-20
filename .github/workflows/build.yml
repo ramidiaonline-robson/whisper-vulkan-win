@@ -86,7 +86,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "whisper-${{ inputs.whisper_tag }}-vulkan"
-          gh release delete $tag --yes --cleanup-tag 2>$null
-          gh release create $tag whisper-bin-win-vulkan-x64.zip SHA256SUMS.txt `
+          gh release delete $tag --repo ${{ github.repository }} --yes --cleanup-tag 2>$null
+          gh release create $tag whisper-bin-win-vulkan-x64.zip SHA256SUMS.txt --repo ${{ github.repository }} --target main `
             --title "whisper.cpp ${{ inputs.whisper_tag }} com Vulkan (Windows x64)" `
             --notes "Compilação do whisper.cpp ${{ inputs.whisper_tag }} com -DGGML_VULKAN=ON para placas AMD e Intel (Arc). Usa o vulkan-1.dll que já vem com o driver de vídeo. Usado pelo instalador automático do AtaFlow AI."
